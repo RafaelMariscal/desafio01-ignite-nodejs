@@ -11,13 +11,30 @@ app.use(express.json());
 const users = [];
 
 function checksExistsUserAccount(request, response, next) {
-  const { username } = request.body
+  const { username } = request.headers
   const user = users.find(user => user.username === username)
   if (!user) {
-    request.user = user
-    return next()
+    return response.status(404).json({ error: 'User not found.' })
   }
-  return response.status(400).json({ error: 'User not found.' })
+  request.user = user
+  return next()
+}
+
+function checkIfTodoExists(request, response, next) {
+  const { user } = request;
+  const { id } = request.params;
+
+  const todo = user.todos.find(todo => todo.id === id);
+
+  if (!todo) {
+    return response.status(404).json({
+      error: "Task not Found"
+    });
+  }
+
+  request.todo = todo;
+
+  return next();
 }
 
 app.post('/users', (request, response) => {
@@ -35,28 +52,17 @@ app.post('/users', (request, response) => {
     todos: []
   }
   users.push(newUser)
-  return response.status(201).json({ newUser })
+  return response.status(201).json(newUser)
 });
 
 app.get('/todos', checksExistsUserAccount, (request, response) => {
   const { user } = request
-  const { username } = request.headers
-
-  if (!username) {
-    return response.status(400).json({ error: 'No username found at request headers.' })
-  }
-
-  return user.todos
+  return response.status(201).json(user.todos)
 });
 
 app.post('/todos', checksExistsUserAccount, (request, response) => {
   const { user } = request
   const { title, deadline } = request.body
-  const { username } = request.headers
-
-  if (!username) {
-    return response.status(400).json({ error: 'No username found at request headers.' })
-  }
 
   const newTodo = {
     id: uuidv4(),
@@ -67,35 +73,34 @@ app.post('/todos', checksExistsUserAccount, (request, response) => {
   }
   user.todos.push(newTodo)
 
-  return response.status(201).json({ newTodo })
+  return response.status(201).json(newTodo)
 });
 
-app.put('/todos/:id', checksExistsUserAccount, (request, response) => {
-  const { user } = request
-  const { id } = request.params
+app.put('/todos/:id', checksExistsUserAccount, checkIfTodoExists, (request, response) => {
+  const { todo } = request
   const { title, deadline } = request.body
-  const { username } = request.headers
 
-  if (!username) {
-    return response.status(400).json({ error: 'No username found at request headers.' })
-  }
+  todo.title = title
+  todo.deadline = deadline
 
-  const indexOfSelectedTodo = user.todos.indexOf(todo => todo.id === id)
-  if (!indexOfSelectedTodo || indexOfSelectedTodo === -1) {
-    return response.status(400).json({ error: 'Todo not found at Todos Array.' })
-  }
-  user.todos[indexOfSelectedTodo].title = title
-  user.todos[indexOfSelectedTodo].deadline = deadline
-
-  return response.status(201).send()
+  return response.status(201).send(todo)
 });
 
-app.patch('/todos/:id/done', checksExistsUserAccount, (request, response) => {
-  // Complete aqui
+app.patch('/todos/:id/done', checksExistsUserAccount, checkIfTodoExists, (request, response) => {
+  const { todo } = request
+
+  let isTaskDone = todo.done
+  todo.done = !isTaskDone
+
+  return response.status(201).send(todo)
 });
 
-app.delete('/todos/:id', checksExistsUserAccount, (request, response) => {
-  // Complete aqui
+app.delete('/todos/:id', checksExistsUserAccount, checkIfTodoExists, (request, response) => {
+  const { user, todo } = request
+
+  user.todos.splice(todo, 1)
+
+  return response.status(204).send(user)
 });
 
 module.exports = app;
